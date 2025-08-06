@@ -5,9 +5,11 @@ function AddStaff({ refreshStaff }) {
   const [id, setId] = useState(null);
   const [departmentId, setDepartmentId] = useState('');
   const [positionId, setPositionId] = useState('');
+  const [spatieRole, setSpatieRole] = useState('');
   const [phone, setPhone] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
+  const [passwordConfirmation, setPasswordConfirmation] = useState('');
   const [firstName, setFirstName] = useState('');
   const [lastName, setLastName] = useState('');
   const [email, setEmail] = useState('');
@@ -17,30 +19,85 @@ function AddStaff({ refreshStaff }) {
   const [image, setImage] = useState(null);
   const [departments, setDepartments] = useState([]);
   const [positions, setPositions] = useState([]);
+  const [roles, setRoles] = useState([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
 
   useEffect(() => {
     const fetchData = async () => {
       try {
-        const [deptResponse, posResponse] = await Promise.all([
-          api.get('/departments'),
-          api.get('/positions'),
-        ]);
-        setDepartments(deptResponse.data);
-        setPositions(posResponse.data);
+        setLoading(true);
+        console.log('Fetching form data...');
+        
+        // Try using the form-data endpoint first
+        try {
+          const response = await api.get('/users/form-data');
+          console.log('Form data response:', response.data);
+          
+          if (response.data) {
+            setDepartments(response.data.departments || []);
+            setPositions(response.data.positions || []);
+            setRoles(response.data.roles || []);
+            setError(null);
+            setLoading(false);
+            return;
+          }
+        } catch (formError) {
+          console.log('Form data endpoint failed, trying individual endpoints:', formError);
+        }
+        
+        // If form-data endpoint fails, try individual endpoints
+        console.log('Trying individual endpoints...');
+        
+        try {
+          const deptResponse = await api.get('/departments');
+          console.log('Departments response:', deptResponse.data);
+          setDepartments(deptResponse.data || []);
+        } catch (err) {
+          console.error('Departments error:', err);
+        }
+        
+        try {
+          const posResponse = await api.get('/positions');
+          console.log('Positions response:', posResponse.data);
+          setPositions(posResponse.data || []);
+        } catch (err) {
+          console.error('Positions error:', err);
+        }
+        
+        try {
+          const roleResponse = await api.get('/roles');
+          console.log('Roles response:', roleResponse.data);
+          setRoles(roleResponse.data || []);
+        } catch (err) {
+          console.error('Roles error:', err);
+        }
+        
+        setError(null);
       } catch (error) {
         console.error('Error fetching dropdowns:', error);
+        setError(`Failed to load form data: ${error.message || 'Unknown error'}`);
+      } finally {
+        setLoading(false);
       }
     };
+    
     fetchData();
-
+    
     const editData = JSON.parse(localStorage.getItem('editUser'));
     if (editData) {
+      console.log('Loading edit data:', editData);
       setId(editData.id || null);
       setDepartmentId(editData.department_id || '');
       setPositionId(editData.position_id || '');
+      // Check if role exists in the edit data
+      if (editData.roles && editData.roles.length > 0) {
+        setSpatieRole(editData.roles[0].name);
+      }
       setPhone(editData.phone || '');
       setUsername(editData.username || '');
       setPassword('');
+      setPasswordConfirmation('');
       setFirstName(editData.first_name || '');
       setLastName(editData.last_name || '');
       setEmail(editData.email || '');
@@ -54,13 +111,24 @@ function AddStaff({ refreshStaff }) {
 
   const handleSubmit = async (e) => {
     e.preventDefault();
+    
+    // Validate password confirmation
+    if (password && password !== passwordConfirmation) {
+      alert('Passwords do not match');
+      return;
+    }
+    
     try {
       const formData = new FormData();
       formData.append('department_id', departmentId);
       formData.append('position_id', positionId);
+      formData.append('spatie_role', spatieRole);
       formData.append('phone', phone || '');
       formData.append('username', username);
-      if (password) formData.append('password', password);
+      if (password) {
+        formData.append('password', password);
+        formData.append('password_confirmation', passwordConfirmation);
+      }
       formData.append('first_name', firstName);
       formData.append('last_name', lastName);
       formData.append('email', email);
@@ -69,24 +137,29 @@ function AddStaff({ refreshStaff }) {
       formData.append('status', status);
       if (image) formData.append('image', image);
 
+      console.log('Submitting form...');
+      
       if (id) {
-        await api.patch(`/users/update/${id}`, formData, {
+        await api.post(`/users/${id}`, formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        alert('User updated successfully at 04:58 PM +07 on Friday, June 06, 2025');
+        alert('User updated successfully');
       } else {
-        await api.post('/users/create', formData, {
+        await api.post('/users', formData, {
           headers: { 'Content-Type': 'multipart/form-data' },
         });
-        alert('User added successfully at 04:58 PM +07 on Friday, June 06, 2025');
+        alert('User added successfully');
       }
-
+      
+      // Reset form
       setId(null);
       setDepartmentId('');
       setPositionId('');
+      setSpatieRole('');
       setPhone('');
       setUsername('');
       setPassword('');
+      setPasswordConfirmation('');
       setFirstName('');
       setLastName('');
       setEmail('');
@@ -94,13 +167,32 @@ function AddStaff({ refreshStaff }) {
       setSalary('');
       setStatus('active');
       setImage(null);
-      refreshStaff();
+      
+      if (refreshStaff) refreshStaff();
     } catch (error) {
       console.error('Submit error:', error);
-      const errorMessage = error.response?.data?.message || 'Failed to submit';
+      const errorMessage = error.response?.data?.message || error.message || 'Failed to submit';
       alert(errorMessage);
     }
   };
+
+  if (loading) {
+    return <div>Loading form data...</div>;
+  }
+
+  if (error) {
+    return (
+      <div>
+        <div style={{ color: 'red', marginBottom: '20px' }}>Error: {error}</div>
+        <button 
+          onClick={() => window.location.reload()} 
+          style={{ padding: '10px', backgroundColor: '#007bff', color: 'white', border: 'none', borderRadius: '4px', cursor: 'pointer' }}
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
 
   return (
     <div style={styles.container}>
@@ -123,6 +215,7 @@ function AddStaff({ refreshStaff }) {
               ))}
             </select>
           </label>
+          
           <label style={styles.label}>
             Position:
             <select
@@ -139,6 +232,24 @@ function AddStaff({ refreshStaff }) {
               ))}
             </select>
           </label>
+          
+          <label style={styles.label}>
+            Role:
+            <select
+              value={spatieRole}
+              onChange={(e) => setSpatieRole(e.target.value)}
+              required
+              style={styles.input}
+            >
+              <option value="">Select Role</option>
+              {roles.map((role) => (
+                <option key={role.id} value={role.name}>
+                  {role.name}
+                </option>
+              ))}
+            </select>
+          </label>
+          
           <label style={styles.label}>
             Phone:
             <input
@@ -148,6 +259,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Username:
             <input
@@ -158,6 +270,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Password:
             <input
@@ -169,6 +282,19 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
+          <label style={styles.label}>
+            Confirm Password:
+            <input
+              type="password"
+              value={passwordConfirmation}
+              onChange={(e) => setPasswordConfirmation(e.target.value)}
+              placeholder={id ? 'Leave blank if unchanged' : ''}
+              required={!id}
+              style={styles.input}
+            />
+          </label>
+          
           <label style={styles.label}>
             First Name:
             <input
@@ -179,6 +305,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Last Name:
             <input
@@ -189,6 +316,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Email:
             <input
@@ -199,6 +327,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Hire Date:
             <input
@@ -209,6 +338,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Salary:
             <input
@@ -219,6 +349,7 @@ function AddStaff({ refreshStaff }) {
               style={styles.input}
             />
           </label>
+          
           <label style={styles.label}>
             Status:
             <select
@@ -232,6 +363,7 @@ function AddStaff({ refreshStaff }) {
               <option value="terminated">Terminated</option>
             </select>
           </label>
+          
           <label style={styles.label}>
             Image:
             <input
