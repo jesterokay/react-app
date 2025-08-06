@@ -46,15 +46,19 @@ function Login() {
     }
 
     if (error === 0) {
+      // Fixed: Use correct parameter names that backend expects
       api.post('/users/login', {
-        txtname: txtUser,
-        txtpass: txtPass,
+        email: txtUser,
+        password: txtPass,
+        device_name: 'web_app', // Fixed: Added required device_name parameter
       })
         .then((response) => {
           console.log('Login response:', response.data);
           
-          // Check if we have user data (successful login)
-          if (response.data && response.data.user && response.status === 200) {
+          // Check if we have token and user data (successful login)
+          if (response.data && response.data.token && response.data.user) {
+            // Store token and user data
+            localStorage.setItem('token', response.data.token);
             localStorage.setItem('user', JSON.stringify(response.data.user));
             localStorage.setItem('isLoggedIn', 'true');
             
@@ -78,7 +82,18 @@ function Login() {
                 setLoginFail('Invalid username/email or password');
                 break;
               case 422:
-                setLoginFail('Please check your input and try again');
+                // Fixed: Display validation errors if any
+                const validationErrors = error.response.data.errors;
+                if (validationErrors) {
+                  if (validationErrors.email) {
+                    setErrorUser(validationErrors.email[0]);
+                  }
+                  if (validationErrors.password) {
+                    setErrorPass(validationErrors.password[0]);
+                  }
+                } else {
+                  setLoginFail('Please check your input and try again');
+                }
                 break;
               case 429:
                 setLoginFail('Too many login attempts. Please try again later');
@@ -111,13 +126,11 @@ function Login() {
                       <h5 className="card-title text-center pb-0 fs-4">Login to Your Account</h5>
                       <p className="text-center small">Enter your username/email & password to login</p>
                     </div>
-
                     {loginFail && (
                       <div className="alert alert-danger" role="alert">
                         {loginFail}
                       </div>
                     )}
-
                     <form className="row g-3 needs-validation" onSubmit={userLogin} noValidate>
                       <div className="col-12">
                         <label htmlFor="yourUsername" className="form-label">Username or Email</label>
@@ -139,7 +152,6 @@ function Login() {
                           </div>
                         )}
                       </div>
-
                       <div className="col-12">
                         <label htmlFor="yourPassword" className="form-label">Password</label>
                         <div className="input-group">
@@ -167,7 +179,6 @@ function Login() {
                           </div>
                         )}
                       </div>
-
                       <div className="col-12">
                         <button 
                           className="btn btn-primary w-100" 
@@ -184,7 +195,6 @@ function Login() {
                           )}
                         </button>
                       </div>
-
                       <div className="col-12">
                         <p className="small mb-0">
                           Don't have an account? <a href="/register">Create an account</a>
